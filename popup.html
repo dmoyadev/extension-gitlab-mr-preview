@@ -42,11 +42,21 @@
 			gap: 8px;
 
 			label {
-				display: block;
+				display: flex;
+				flex-direction: column;
+				gap: 4px;
 				font-size: 12px;
 				font-weight: 600;
-				margin-bottom: 6px;
 				color: #666;
+
+				.required {
+					color: red;
+				}
+
+				.optional {
+					font-size: 11px;
+					color: #888;
+				}
 			}
 
 			input {
@@ -84,14 +94,18 @@
 					transform: translateY(1px);
 				}
 			}
+
+			#status {
+				height: 14px;
+				font-size: 11px;
+				margin: 0;
+				text-align: center;
+				font-weight: 500;
+			}
 		}
 
-		#status {
-			height: 14px;
-			font-size: 11px;
-			margin-top: 8px;
-			text-align: center;
-			font-weight: 500;
+		pre {
+			margin: 4px 0;
 		}
 
 		footer {
@@ -102,7 +116,8 @@
 			font-size: 11px;
 			color: #999;
 
-			strong {
+			a {
+				text-decoration: none;
 				color: var(--accent-color);
 			}
 		}
@@ -119,7 +134,7 @@
 
 <form id="form" class="form-group">
 	<label>
-		Personal Access Token
+		<span>Personal Access Token <span class="required">*</span></span>
 		<input id="token" name="token" type="password" />
 		<small>
 			Used for getting MR's info. You can get one going to:
@@ -127,20 +142,20 @@
 		</small>
 	</label>
 
-	<label>
-		GitLab domain
-		<input id="domain" name="domain" type="url" placeholder="https://gitlab.xxxxxx.xxx" />
-		<small>Only used for getting the avatars, nothing else</small>
-	</label>
-
 	<button type="submit">Save</button>
+	<p id="status"></p>
+
+	<label>
+		<span>GitLab domain <span class="optional">(optional)</span></span>
+		<input id="domain" name="domain" type="url" placeholder="https://gitlab.xxxxxx.xxx" />
+		<small>Only used for getting the avatars, nothing else.</small>
+	</label>
 </form>
 
-
-<p id="status"></p>
-
 <footer>
-	Made with 💚 by <a href="https://github.com/dmoyadev" target="_blank"></a><strong>Daniel Moya</strong></a>
+	Made with 💚 by <a href="https://github.com/dmoyadev" target="_blank"><strong>Daniel Moya</strong></a>
+	<br>
+	<small>less <i>"thanks"</i> and <i>"sorry"</i>, more <i>"take this 5€ Bizum"</i></small>
 </footer>
 
 <script src="popup.js"></script>

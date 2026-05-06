@@ -206,10 +206,11 @@ const UI = {
     document.head.appendChild(styleEl);
   },
 
-  createCard(mr, note = null) {
+  createCard(mr, url, note = null) {
     const card = document.createElement('div');
     card.className = 'gl-card';
     card.title = mr.description;
+    card.onclick = () => window.open(url, '_blank');
 
     // Use the specific note author if it's a note, otherwise the MR author
     const author = note ? note.author : mr.author;
@@ -295,7 +296,7 @@ async function processLink(link) {
     noteData = await GitLabAPI.fetchNote(host, projectPath, iid, noteId);
   }
 
-  link.after(UI.createCard(mrData, noteData));
+  link.after(UI.createCard(mrData, link, noteData));
 }
 
 // Initialization
