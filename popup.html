@@ -117,13 +117,23 @@
 	<h2>GitLab MR Preview</h2>
 </header>
 
-<form onsubmit="saveConfig" class="form-group">
+<form id="form" class="form-group">
 	<label>
 		Personal Access Token
 		<input id="token" name="token" type="password" />
+		<small>
+			Used for getting MR's info. You can get one going to:
+			<pre style="white-space: normal">Gitlab > Preferences > Personal Access Tokens > Add new token > Select just "read api" scope</pre>
+		</small>
 	</label>
 
-	<button>Save</button>
+	<label>
+		GitLab domain
+		<input id="domain" name="domain" type="url" placeholder="https://gitlab.xxxxxx.xxx" />
+		<small>Only used for getting the avatars, nothing else</small>
+	</label>
+
+	<button type="submit">Save</button>
 </form>
 
 
