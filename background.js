@@ -1,4 +1,4 @@
-chrome.runtime.onMessage.addEventListener((request, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	if (request.action === "fetchAvatar" && request.url) {
 
 		// First, grab the saved token so GitLab accepts the request
