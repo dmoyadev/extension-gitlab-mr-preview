@@ -1,10 +1,9 @@
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+chrome.runtime.onMessage.addEventListener((request, sender, sendResponse) => {
 	if (request.action === "fetchAvatar" && request.url) {
 
 		// First, grab the saved token so GitLab accepts the request
 		chrome.storage.local.get("gitlabToken").then(({ gitlabToken }) => {
 			const headers = gitlabToken ? { "PRIVATE-TOKEN": gitlabToken } : {};
-
 			return fetch(request.url, { headers });
 		})
 		.then(response => {

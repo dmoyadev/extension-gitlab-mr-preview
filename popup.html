@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 	<meta charset="UTF-8">
-	<title>Gitlab MR Preview</title>
+	<title>GitLab MR Previewer</title>
 	<style>
 		:root {
 			--primary-color: #7759c2; /* Morado GitLab */
@@ -126,10 +126,8 @@
 <body>
 
 <header>
-	<svg width="20" height="20" viewBox="0 0 124 113" fill="none" xmlns="http://www.w3.org/2000/svg">
-		<path d="M124 67.2L111.3 28.1L101.4 5.4C100.2 2.6 96.3 2.6 95.1 5.4L85.2 28.1H38.8L28.9 5.4C27.7 2.6 23.8 2.6 22.6 5.4L12.7 28.1L0 67.2C-0.3 68.2 0.1 69.3 0.9 70L62 113.8L123.1 70C123.9 69.3 124.3 68.2 124 67.2Z" fill="var(--accent-color)"/>
-	</svg>
-	<h2>GitLab MR Preview</h2>
+	<img src="icons/icon.svg" width="24" height="24" alt="GitLab MR Previewer" />
+	<h2>GitLab MR Previewer</h2>
 </header>
 
 <form id="form" class="form-group">
@@ -138,7 +136,7 @@
 		<input id="token" name="token" type="password" />
 		<small>
 			Used for getting MR's info. You can get one going to:
-			<pre style="white-space: normal">Gitlab > Preferences > Personal Access Tokens > Add new token > Select just "read api" scope</pre>
+			<pre style="white-space: normal">GitLab > Preferences > Personal Access Tokens > Add new token > Select just "read api" scope</pre>
 		</small>
 	</label>
 

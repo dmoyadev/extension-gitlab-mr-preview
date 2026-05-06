@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "GitLab MR Preview",
+  "name": "GitLab MR Previewer",
   "version": "1.0",
   "optional_host_permissions": ["https://*/*"],
   "content_scripts": [{

@@ -3,7 +3,7 @@
  */
 const CONFIG = {
   CACHE_TTL: 1000 * 60 * 10,
-  CSS_ID: 'gitlab-mr-preview-styles',
+  CSS_ID: 'gitlab-mr-previewer-styles',
   SELECTOR: "a[href*='/merge_requests/']"
 };
 
@@ -186,7 +186,7 @@ const GitLabAPI = {
       await Cache.set(`mr:${key}`, data);
       return data;
     } catch (err) {
-      console.warn("GitLab Preview skip:", err.message);
+      console.warn("GitLab Previewer skip:", err.message);
       return null;
     } finally {
       this._inFlight.delete(key);
