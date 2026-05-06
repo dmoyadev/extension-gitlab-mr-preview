@@ -7,76 +7,95 @@ const CONFIG = {
   SELECTOR: "a[href*='/merge_requests/']"
 };
 
-const MR_REGEX = /https?:\/\/([^\/]+)\/(.+?)\/-\/merge_requests?\/(\d+)/;
+// Captures: 1. Host, 2. Path, 3. IID, 4. Note ID (optional)
+const MR_REGEX = /https?:\/\/([^\/]+)\/(.+?)\/-\/merge_requests?\/(\d+)(?:#note_(\d+))?/;
 
 /**
  * CSS Styles - Separated from Logic
  */
   // language=CSS
 const STYLES = `
-    .gl-card {
-      all: initial; /* Reset inherited styles */
-      display: block;
-      max-width: 520px;
-      padding: 12px;
-      margin: 8px 0;
-      border: 1px solid var(--color-border, #ddd);
-      border-radius: 8px;
-      background: var(--color-bg, #fff);
-      color: var(--color-text, #111);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 13px;
-      cursor: pointer;
-      transition: transform 0.1s ease;
-
-      &:hover {
-        transform: translateY(-1px);
-        border-color: #aaa;
-      }
+  .gl-card {
+    --color-bg: #fff;
+    --color-text: #111;
+    --color-border: #ddd;
+    --color-text-secondary: #333;
+    
+    all: initial; /* Reset inherited styles */
+    display: block;
+    max-width: 520px;
+    padding: 12px;
+    margin: 8px 0;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  
+    &:hover {
+      transform: translateY(-1px);
+      border-color: #aaa;
     }
-
-    .title {
-      font-weight: 600;
-      margin-bottom: 6px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+  }
+  
+  .title {
+    font-weight: 600;
+    margin-bottom: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: space-between;
+  }
+  
+  .meta {
+    font-size: 12px;
+    display: flex;
+    gap: 12px;
+    color: var(--color-text-secondary);
+    justify-content: space-between;
+    
+    .author {
       display: flex;
       align-items: center;
-      gap: 6px;
-      justify-content: space-between;
+      gap: 4px;
     }
-
-    .meta {
-      font-size: 12px;
-      display: flex;
-      gap: 12px;
-      color: var(--color-text-secondary, #333);
-      justify-content: space-between;
-      
-      .author {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-
-      .avatar {
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        object-fit: cover;
-        background: #eee; /* Fallback placeholder */
-      }
+  
+    .avatar {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #eee; /* Fallback placeholder */
     }
+  }
 
-    @media (prefers-color-scheme: dark) {
-      .gl-card {
-        --color-bg: #2b2b2b;
-        --color-text: #eee;
-        --color-border: #444;
-        --color-text-secondary: #ccc;
-      }
-    }
+  .note {
+    margin-top: 10px;
+    padding: 8px;
+    color: var(--color-text);
+    display: -webkit-box;
+    -webkit-line-clamp: 3; /* Limit to 3 lines */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    background: var(--color-border);
+    border-radius: 4px;
+  }
+  
+  /* Dark mode */
+  html[data-theme="dark"] .gl-card,
+  body.dark-mode .gl-card,
+  [data-theme="dark"] .gl-card {
+      --color-bg: #2b2b2b;
+      --color-text: #eee;
+      --color-border: #444;
+      --color-text-secondary: #ccc;
+  }
   `;
 
 /**
@@ -126,6 +145,26 @@ const GitLabAPI = {
     return promise;
   },
 
+  async fetchNote(host, projectPath, iid, noteId) {
+    const key = `note:${host}:${projectPath}:${noteId}`;
+    const cached = await Cache.get(key);
+    if (cached) return cached;
+
+    try {
+      const { gitlabToken } = await chrome.storage.local.get("gitlabToken");
+      const url = `https://${host}/api/v4/projects/${encodeURIComponent(projectPath)}/merge_requests/${iid}/notes/${noteId}`;
+
+      const res = await fetch(url, { headers: { "PRIVATE-TOKEN": gitlabToken } });
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      await Cache.set(key, data);
+      return data;
+    } catch (err) {
+      return null;
+    }
+  },
+
   async _performFetch(host, projectPath, iid, key) {
     try {
       const { gitlabToken } = await chrome.storage.local.get("gitlabToken");
@@ -152,7 +191,7 @@ const GitLabAPI = {
     } finally {
       this._inFlight.delete(key);
     }
-  }
+  },
 };
 
 /**
@@ -167,14 +206,13 @@ const UI = {
     document.head.appendChild(styleEl);
   },
 
-  async createCard(mr) {
+  createCard(mr, note = null) {
     const card = document.createElement('div');
     card.className = 'gl-card';
-    card.onclick = (e) => {
-      e.stopPropagation();
-      window.open(mr.web_url, '_blank');
-    };
+    card.title = mr.description;
 
+    // Use the specific note author if it's a note, otherwise the MR author
+    const author = note ? note.author : mr.author;
     const status = { merged: "🟣 Merged", closed: "🔴 Closed" }[mr.state] || "🟢 Open";
     const approvedCount = mr.approvals?.approved_by?.length || 0;
     const requiredCount = mr.approvals?.approvals_required || 0;
@@ -190,19 +228,32 @@ const UI = {
       </div>
       <span class="approvals"></span>
     </div>
+    ${note ? '<div class="note"></div>' : ''}
   `;
 
-    // 1. Securely set the text nodes
     card.querySelector('.title-text').textContent = mr.title;
     card.querySelector('.title-id').textContent = `!${mr.iid}`;
-    card.querySelector('.name').textContent = mr.author?.name || 'Unknown';
+    card.querySelector('.name').textContent = `${author?.name || 'Unknown'} ${note ? ' commented:' : ''}`;
     card.querySelector('.approvals').textContent = `${status} · ✔ ${approvedCount}/${requiredCount} approvals`;
 
+    if (note) {
+      card.querySelector('.note').textContent = `💬 ${note.body}`;
+    }
+
+    // Handle Avatar (using the background script logic from before)
+    if (author?.avatar_url) {
+      this.injectAvatar(card, author);
+    }
+
+    return card;
+  },
+
+  injectAvatar(card, user) {
     // 2. Inject the avatar if it exists
-    if (mr.author?.avatar_url) {
+    if (user.avatar_url) {
       const img = document.createElement('img');
       img.className = 'avatar';
-      img.alt = `${mr.author.name}'s avatar`;
+      img.alt = `${user.name}'s avatar`;
 
       img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -211,7 +262,7 @@ const UI = {
 
       // Safely request the image data behind the scenes
       chrome.runtime.sendMessage(
-        { action: "fetchAvatar", url: mr.author.avatar_url },
+        { action: "fetchAvatar", url: user.avatar_url },
         (response) => {
           if (response && response.dataUrl) {
             img.src = response.dataUrl;
@@ -232,13 +283,19 @@ async function processLink(link) {
   const match = link.href.match(MR_REGEX);
   if (!match) return;
 
+  const [, host, projectPath, iid, noteId] = match;
   link.dataset.mrProcessed = "true";
-  const [, host, projectPath, iid] = match;
 
-  const data = await GitLabAPI.fetchMR(host, projectPath, iid);
-  if (data) {
-    link.after(await UI.createCard(data));
+  // Fetch MR data always (for the title)
+  const mrData = await GitLabAPI.fetchMR(host, projectPath, iid);
+  if (!mrData) return;
+
+  let noteData = null;
+  if (noteId) {
+    noteData = await GitLabAPI.fetchNote(host, projectPath, iid, noteId);
   }
+
+  link.after(UI.createCard(mrData, noteData));
 }
 
 // Initialization
