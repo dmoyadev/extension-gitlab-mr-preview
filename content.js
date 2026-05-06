@@ -1,261 +1,259 @@
+/**
+ * Configuration & Constants
+ */
+const CONFIG = {
+  CACHE_TTL: 1000 * 60 * 10,
+  CSS_ID: 'gitlab-mr-preview-styles',
+  SELECTOR: "a[href*='/merge_requests/']"
+};
+
 const MR_REGEX = /https?:\/\/([^\/]+)\/(.+?)\/-\/merge_requests?\/(\d+)/;
 
-const CACHE_TTL = 1000 * 60 * 10;
+/**
+ * CSS Styles - Separated from Logic
+ */
+  // language=CSS
+const STYLES = `
+    .gl-card {
+      all: initial; /* Reset inherited styles */
+      display: block;
+      max-width: 520px;
+      padding: 12px;
+      margin: 8px 0;
+      border: 1px solid var(--color-border, #ddd);
+      border-radius: 8px;
+      background: var(--color-bg, #fff);
+      color: var(--color-text, #111);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+      transition: transform 0.1s ease;
 
-// ---- cache ----
-const memoryCache = new Map();
-const pendingRequests = new Map();
-
-function getStorage(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (Date.now() > parsed.expiry) {
-      localStorage.removeItem(key);
-      return null;
+      &:hover {
+        transform: translateY(-1px);
+        border-color: #aaa;
+      }
     }
-    return parsed.data;
-  } catch {
+
+    .title {
+      font-weight: 600;
+      margin-bottom: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: space-between;
+    }
+
+    .meta {
+      font-size: 12px;
+      display: flex;
+      gap: 12px;
+      color: var(--color-text-secondary, #333);
+      justify-content: space-between;
+      
+      .author {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .avatar {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        object-fit: cover;
+        background: #eee; /* Fallback placeholder */
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .gl-card {
+        --color-bg: #2b2b2b;
+        --color-text: #eee;
+        --color-border: #444;
+        --color-text-secondary: #ccc;
+      }
+    }
+  `;
+
+/**
+ * Handles persistence and memory caching
+ */
+const Cache = {
+  _memory: new Map(),
+
+  async get(key) {
+    if (this._memory.has(key)) return this._memory.get(key);
+
+    const store = await chrome.storage.local.get(key);
+    const entry = store[key];
+
+    if (entry && Date.now() < entry.expiry) {
+      this._memory.set(key, entry.data);
+      return entry.data;
+    }
     return null;
+  },
+
+  async set(key, data) {
+    const expiry = Date.now() + CONFIG.CACHE_TTL;
+    this._memory.set(key, data);
+    await chrome.storage.local.set({ [key]: { data, expiry } });
   }
-}
+};
 
-function setStorage(key, data) {
-  localStorage.setItem(
-    key,
-    JSON.stringify({ data, expiry: Date.now() + CACHE_TTL })
-  );
-}
+/**
+ * GitLab API Interactions
+ */
+const GitLabAPI = {
+  _inFlight: new Map(),
 
-async function fetchMR(host, projectPath, iid) {
-  const TOKEN = await getToken();
-  if (!TOKEN) throw new Error("Missing GitLab token");
+  async fetchMR(host, projectPath, iid) {
+    const key = `${host}:${projectPath}:${iid}`;
 
-  const key = `${host}:${projectPath}!${iid}`;
+    // 1. Check Cache
+    const cached = await Cache.get(`mr:${key}`);
+    if (cached) return cached;
 
-  if (memoryCache.has(key)) return memoryCache.get(key);
+    // 2. Deduplicate simultaneous requests
+    if (this._inFlight.has(key)) return this._inFlight.get(key);
 
-  const stored = getStorage(key);
-  if (stored) {
-    memoryCache.set(key, stored);
-    return stored;
+    const promise = this._performFetch(host, projectPath, iid, key);
+    this._inFlight.set(key, promise);
+    return promise;
+  },
+
+  async _performFetch(host, projectPath, iid, key) {
+    try {
+      const { gitlabToken } = await chrome.storage.local.get("gitlabToken");
+      if (!gitlabToken) return null;
+
+      const baseUrl = `https://${host}/api/v4/projects/${encodeURIComponent(projectPath)}/merge_requests/${iid}`;
+      const headers = { "PRIVATE-TOKEN": gitlabToken };
+
+      const [resMR, resApp] = await Promise.all([
+        fetch(baseUrl, { headers }),
+        fetch(`${baseUrl}/approvals`, { headers }).catch(() => ({ ok: false }))
+      ]);
+
+      if (!resMR.ok) throw new Error(`HTTP ${resMR.status}`);
+
+      const data = await resMR.json();
+      data.approvals = resApp.ok ? await resApp.json() : {};
+
+      await Cache.set(`mr:${key}`, data);
+      return data;
+    } catch (err) {
+      console.warn("GitLab Preview skip:", err.message);
+      return null;
+    } finally {
+      this._inFlight.delete(key);
+    }
   }
+};
 
-  if (pendingRequests.has(key)) {
-    return pendingRequests.get(key);
+/**
+ * UI Rendering Logic
+ */
+const UI = {
+  init() {
+    if (document.getElementById(CONFIG.CSS_ID)) return;
+    const styleEl = document.createElement('style');
+    styleEl.id = CONFIG.CSS_ID;
+    styleEl.textContent = STYLES;
+    document.head.appendChild(styleEl);
+  },
+
+  async createCard(mr) {
+    const card = document.createElement('div');
+    card.className = 'gl-card';
+    card.onclick = (e) => {
+      e.stopPropagation();
+      window.open(mr.web_url, '_blank');
+    };
+
+    const status = { merged: "🟣 Merged", closed: "🔴 Closed" }[mr.state] || "🟢 Open";
+    const approvedCount = mr.approvals?.approved_by?.length || 0;
+    const requiredCount = mr.approvals?.approvals_required || 0;
+
+    card.innerHTML = `
+    <div class="title">
+       <span class="title-text"></span>
+       <span class="title-id"></span>
+    </div>
+    <div class="meta">
+      <div class="author">
+        <span class="name"></span>
+      </div>
+      <span class="approvals"></span>
+    </div>
+  `;
+
+    // 1. Securely set the text nodes
+    card.querySelector('.title-text').textContent = mr.title;
+    card.querySelector('.title-id').textContent = `!${mr.iid}`;
+    card.querySelector('.name').textContent = mr.author?.name || 'Unknown';
+    card.querySelector('.approvals').textContent = `${status} · ✔ ${approvedCount}/${requiredCount} approvals`;
+
+    // 2. Inject the avatar if it exists
+    if (mr.author?.avatar_url) {
+      const img = document.createElement('img');
+      img.className = 'avatar';
+      img.alt = `${mr.author.name}'s avatar`;
+
+      img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+      const nameEl = card.querySelector('.name');
+      nameEl.parentNode.insertBefore(img, nameEl);
+
+      // Safely request the image data behind the scenes
+      chrome.runtime.sendMessage(
+        { action: "fetchAvatar", url: mr.author.avatar_url },
+        (response) => {
+          if (response && response.dataUrl) {
+            img.src = response.dataUrl;
+            return;
+          }
+          img.remove();
+        }
+      );
+    }
+
+    return card;
   }
+};
 
-  const base = `https://${host}/api/v4/projects/${encodeURIComponent(projectPath)}/merge_requests/${iid}`;
+async function processLink(link) {
+  if (link.dataset.mrProcessed || !link.href) return;
 
-  const promise = Promise.all([
-    fetch(base, {
-      headers: { "PRIVATE-TOKEN": TOKEN }
-    }).then(r => r.json()),
-    fetch(`${base}/approvals`, {
-      headers: { "PRIVATE-TOKEN": TOKEN }
-    }).then(r => r.json()).catch(() => null)
-  ])
-  .then(([mr, approvals]) => {
-    const data = { ...mr, approvals };
-    memoryCache.set(key, data);
-    setStorage(key, data);
-    pendingRequests.delete(key);
-    return data;
-  })
-  .catch(e => {
-    pendingRequests.delete(key);
-    throw e;
-  });
-
-  pendingRequests.set(key, promise);
-  return promise;
-}
-
-// ---- helpers ----
-function isDarkMode() {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
-function el(tag, styles = {}, text) {
-  const e = document.createElement(tag);
-  Object.assign(e.style, styles);
-  if (text) e.textContent = text;
-  return e;
-}
-
-function getCardId(host, projectPath, iid) {
-  return `mr-card-${host}-${projectPath}-${iid}`.replace(/[^\w-]/g, "_");
-}
-
-let cachedToken = null;
-async function getToken() {
-  if (cachedToken) return cachedToken;
-
-  const res = await chrome.storage.local.get(["gitlabToken"]);
-  cachedToken = res.gitlabToken;
-  return cachedToken;
-}
-
-// ---- tooltip ----
-function createTooltip(text) {
-  const tooltip = el("div", {
-    position: "fixed",
-    zIndex: 9999,
-    maxWidth: "300px",
-    padding: "8px",
-    borderRadius: "6px",
-    fontSize: "12px",
-    pointerEvents: "none",
-    background: "#111",
-    color: "#fff",
-    opacity: 0,
-    transition: "opacity 0.1s"
-  }, text);
-
-  document.body.appendChild(tooltip);
-
-  return tooltip;
-}
-
-// ---- UI ----
-function createCard(mr) {
-  const dark = isDarkMode();
-
-  const card = el("div", {
-    border: `1px solid ${dark ? "#444" : "#ddd"}`,
-    borderRadius: "10px",
-    padding: "10px 12px",
-    marginTop: "6px",
-    background: dark ? "#2b2b2b" : "#fff",
-    color: dark ? "#eee" : "#111",
-    fontSize: "13px",
-    maxWidth: "520px",
-    cursor: "pointer"
-  });
-
-  card.onclick = () => window.open(mr.web_url, "_blank");
-
-  // tooltip
-  const tooltip = createTooltip(mr.description || "No description");
-
-  card.onmouseenter = e => {
-    tooltip.style.opacity = 1;
-    tooltip.style.left = e.pageX + 10 + "px";
-    tooltip.style.top = e.pageY + 10 + "px";
-  };
-
-  card.onmousemove = e => {
-    tooltip.style.left = e.pageX + 10 + "px";
-    tooltip.style.top = e.pageY + 10 + "px";
-  };
-
-  card.onmouseleave = () => {
-    tooltip.style.opacity = 0;
-  };
-
-  // title
-  const title = el("div", { fontWeight: "600", marginBottom: "4px" }, mr.title);
-
-  // meta
-  const stateEmoji =
-    mr.state === "merged" ? "🟣 Merged!" :
-    mr.state === "closed" ? "🔴 Closed" :
-    "🟢 In progress...";
-  const stateEl = el("span", { }, `${stateEmoji} !${mr.iid} · ${mr.author?.name}`);
-
-  const meta = el("div", {
-    opacity: "0.7",
-    fontSize: "12px",
-    display: "flex",
-    gap: "4px",
-    justifyContent: "space-between",
-  });
-  meta.appendChild(stateEl);
-
-  // approvals
-  const approvals = mr.approvals;
-
-  if (approvals) {
-    meta.appendChild(el("span", {}, `✔ ${approvals.approved_by?.length || 0}/${approvals.approvals_required || 0} approvals`));
-  }
-
-  card.appendChild(title);
-  card.appendChild(meta);
-
-  return card;
-}
-
-function createLoading() {
-  return el("div", {
-    fontSize: "12px",
-    opacity: "0.6",
-    marginTop: "4px"
-  }, "Loading MR…");
-}
-
-// ---- procesamiento ----
-function processLink(a) {
-  const href = a.href;
-
-  const match = href.match(MR_REGEX);
+  const match = link.href.match(MR_REGEX);
   if (!match) return;
 
+  link.dataset.mrProcessed = "true";
   const [, host, projectPath, iid] = match;
-  const cardId = getCardId(host, projectPath, iid);
 
-  // 🔑 si la card ya existe en el DOM → reinyectar y salir
-  const existingCard = document.getElementById(cardId);
-  if (existingCard) {
-    if (a.nextSibling !== existingCard) {
-      a.after(existingCard);
-    }
-    return;
+  const data = await GitLabAPI.fetchMR(host, projectPath, iid);
+  if (data) {
+    link.after(await UI.createCard(data));
   }
-
-  // evitar múltiples loads simultáneos
-  if (a.dataset.mrLoading) return;
-  a.dataset.mrLoading = "true";
-
-  const loading = createLoading();
-  a.after(loading);
-
-  fetchMR(host, projectPath, iid)
-  .then(mr => {
-    if (!mr?.title) return;
-
-    const card = createCard(mr);
-    card.id = cardId; // 🔑 aquí asignas el ID estable
-
-    loading.replaceWith(card);
-  })
-  .catch(() => {
-    loading.textContent = "Failed to load MR";
-  });
 }
 
-// ---- scan ----
-function scan(root = document) {
-  console.log('Scanning...')
-  root.querySelectorAll("a[href*='/merge_requests/']").forEach(processLink);
-}
+// Initialization
+UI.init();
 
 const observer = new MutationObserver(mutations => {
-  for (const m of mutations) {
-    for (const node of m.addedNodes) {
-      if (node.nodeType !== 1) continue;
-
-      const links = node.querySelectorAll?.("a[href*='gitlab']");
-      if (links?.length) {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) {
+      if (node.nodeType === 1) {
+        const links = node.matches(CONFIG.SELECTOR) ? [node] : node.querySelectorAll(CONFIG.SELECTOR);
         links.forEach(processLink);
       }
     }
   }
 });
 
-observer.observe(document.body, {
-  childList: true,
-  subtree: true
-});
-
-scan();
+observer.observe(document.body, { childList: true, subtree: true });
+document.querySelectorAll(CONFIG.SELECTOR).forEach(processLink);

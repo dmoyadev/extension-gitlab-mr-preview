@@ -1,13 +1,138 @@
-<!doctype html>
-<html>
-	<body style="font-family: sans-serif; width: 250px;">
-		<label>
-			GitLab Token
-			<input id="token" type="password" placeholder="Personal Access Token" style="width: 100%;" />
-		</label>
-		<button id="save">Save</button>
-		<p id="status"></p>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<title>Gitlab MR Preview</title>
+	<style>
+		:root {
+			--primary-color: #7759c2; /* Morado GitLab */
+			--accent-color: #e24329;  /* Naranja GitLab */
+			--bg-color: #ffffff;
+			--text-color: #333238;
+			--border-color: #dbdbdb;
+			--font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+		}
 
-		<script src="popup.js"></script>
-	</body>
+		body {
+			font-family: var(--font-family);
+			width: 280px;
+			margin: 0;
+			padding: 16px;
+			background-color: var(--bg-color);
+			color: var(--text-color);
+		}
+
+		header {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-bottom: 16px;
+
+			h2 {
+				font-size: 16px;
+				margin: 0;
+				color: var(--text-color);
+			}
+		}
+
+		form {
+			margin-bottom: 12px;
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+
+			label {
+				display: block;
+				font-size: 12px;
+				font-weight: 600;
+				margin-bottom: 6px;
+				color: #666;
+			}
+
+			input {
+				width: 100%;
+				box-sizing: border-box;
+				padding: 8px 10px;
+				border: 1px solid var(--border-color);
+				border-radius: 4px;
+				font-size: 13px;
+				transition: border-color 0.2s;
+			}
+
+			input:focus {
+				outline: none;
+				border-color: var(--primary-color);
+				box-shadow: 0 0 0 2px rgba(119, 89, 194, 0.2);
+			}
+
+			button {
+				width: 100%;
+				padding: 10px;
+				background-color: var(--primary-color);
+				color: white;
+				border: none;
+				border-radius: 4px;
+				font-weight: 600;
+				cursor: pointer;
+				transition: background-color 0.2s;
+
+				&:hover {
+					background-color: #5941a9;
+				}
+
+				&:active {
+					transform: translateY(1px);
+				}
+			}
+		}
+
+		#status {
+			height: 14px;
+			font-size: 11px;
+			margin-top: 8px;
+			text-align: center;
+			font-weight: 500;
+		}
+
+		footer {
+			margin-top: 8px;
+			padding-top: 12px;
+			border-top: 1px solid #eee;
+			text-align: center;
+			font-size: 11px;
+			color: #999;
+
+			strong {
+				color: var(--accent-color);
+			}
+		}
+	</style>
+</head>
+<body>
+
+<header>
+	<svg width="20" height="20" viewBox="0 0 124 113" fill="none" xmlns="http://www.w3.org/2000/svg">
+		<path d="M124 67.2L111.3 28.1L101.4 5.4C100.2 2.6 96.3 2.6 95.1 5.4L85.2 28.1H38.8L28.9 5.4C27.7 2.6 23.8 2.6 22.6 5.4L12.7 28.1L0 67.2C-0.3 68.2 0.1 69.3 0.9 70L62 113.8L123.1 70C123.9 69.3 124.3 68.2 124 67.2Z" fill="var(--accent-color)"/>
+	</svg>
+	<h2>GitLab MR Preview</h2>
+</header>
+
+<form onsubmit="saveConfig" class="form-group">
+	<label>
+		Personal Access Token
+		<input id="token" name="token" type="password" />
+	</label>
+
+	<button>Save</button>
+</form>
+
+
+<p id="status"></p>
+
+<footer>
+	Made with 💚 by <a href="https://github.com/dmoyadev" target="_blank"></a><strong>Daniel Moya</strong></a>
+</footer>
+
+<script src="popup.js"></script>
+</body>
 </html>
