@@ -16,8 +16,8 @@ A lightweight Chrome Extension that transforms plain GitLab Merge Request links 
 ---
 
 <p align="center">
-	<img src="/screenshots/slide-1-large.png" width="1072" alt="GitLab MR Previewer in action on Google Chat" />
-    <img src="/screenshots/slide-2-large.png" width="1072" alt="GitLab MR Previewer in action with notes" />
+	<img style="width: 45%" src="/screenshots/slide-1-large.png" width="500" alt="GitLab MR Previewer in action on Google Chat" />
+    <img style="width: 45%" src="/screenshots/slide-2-large.png" width="500" alt="GitLab MR Previewer in action with notes" />
 </p>
 
 ## 🚀 Installation (Developer Mode)
